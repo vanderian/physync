@@ -1,0 +1,21 @@
+[package]
+name = "physync_relay"
+version = "0.1.0"
+authors = ["Marian Vanderka <vanderka.marian@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+tokio = { version = "0.2", features = ["full"] }
+futures = "0.3.4"
+clap = { version = "2.33", features = ["yaml"] }
+crc = "1.8"
+lazy_static = "1.4"
+rand = "0.7"
+byteorder = "1.3"
+log = "0.4"
+env_logger = "0.7"
+#tokio-macros = "0.2"
+
+[lib]
+name = "physync"
+path = "src/lib.rs"

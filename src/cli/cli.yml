@@ -1,0 +1,33 @@
+name: physync
+version: "0.1.0"
+author: marian vanderka <vanderka.marian@gmail.com>
+about: Testing binary physync server/client
+
+subcommands:
+  - server:
+      about: Starts in server mode
+      args:
+        - LISTEN_HOST:
+            help: "Which host the server bind to. 0.0.0.0/0 will bind to all"
+            required: false
+            takes_value: true
+            long: bind-host
+            default_value: "127.0.0.1:45678"
+            short: h
+#  - client:
+#      about: Starts the tester in client mode
+#      args:
+#        - CONNECT_ADDR:
+#            help: "Which host the client will connect to, as a hostname or IP address"
+#            required: true
+#            takes_value: true
+#            long: connect-host
+#            default_value: "127.0.0.1:45678"
+#            short: H
+#        - LISTEN_HOST:
+#            help: "Which host the client should bind to. 0.0.0.0/0 will bind to all"
+#            required: false
+#            takes_value: true
+#            long: bind-host
+#            default_value: "127.0.0.1:45679"
+#            short: h
