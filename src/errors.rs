@@ -3,6 +3,7 @@ use std::{fmt, io, result};
 use std::error::Error;
 use std::fmt::{Display, Formatter};
 use tokio::task::JoinError;
+use tokio::time::Elapsed;
 
 pub type Result<T> = result::Result<T, ErrorKind>;
 
@@ -14,6 +15,12 @@ pub enum ErrorKind {
     DecodingError(DecodingErrorKind),
     /// Expected header but could not be read from buffer.
     CouldNotReadHeader(String),
+    /// Protocol version does not match
+    ProtocolVersionMismatch,
+    /// Invalid session id
+    SessionMismatch,
+    /// Socket read timeout expired
+    ReadTimeout(Elapsed),
 }
 
 impl Error for ErrorKind {}
@@ -32,6 +39,11 @@ impl Display for ErrorKind {
                 "Expected {} header but could not be read from buffer.",
                 header
             ),
+            ErrorKind::ProtocolVersionMismatch => write!(f, "The protocol versions do not match."),
+            ErrorKind::SessionMismatch => write!(f, "The session id does not match."),
+            ErrorKind::ReadTimeout(elapsed) => {
+                write!(f, "The socket read timeout expired. Reason: {:}.", elapsed)
+            }
         }
     }
 }
@@ -60,5 +72,11 @@ impl From<io::Error> for ErrorKind {
 impl From<JoinError> for ErrorKind {
     fn from(inner: JoinError) -> ErrorKind {
         ErrorKind::IOError(io::Error::from(inner))
+    }
+}
+
+impl From<Elapsed> for ErrorKind {
+    fn from(inner: Elapsed) -> ErrorKind {
+        ErrorKind::ReadTimeout(inner)
     }
 }

@@ -10,6 +10,7 @@ pub enum PacketType {
     Data = 0,
     Connect = 1,
     Disconnect = 2,
+    Heartbeat = 3,
 }
 
 impl EnumConverter for PacketType {
@@ -27,6 +28,7 @@ impl TryFrom<u8> for PacketType {
             0 => Ok(PacketType::Data),
             1 => Ok(PacketType::Connect),
             2 => Ok(PacketType::Disconnect),
+            3 => Ok(PacketType::Heartbeat),
             _ => Err(ErrorKind::DecodingError(DecodingErrorKind::PacketType)),
         }
     }

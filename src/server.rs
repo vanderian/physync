@@ -1,127 +1,54 @@
-use std::collections::HashMap;
+use crate::errors::Result;
+use crate::{Peer, Packet};
 use std::net::SocketAddr;
-use std::str::from_utf8;
-
-use log::{debug, error};
-use rand::random;
-
-use crate::packet::{PacketReader, PacketType};
-use crate::{errors::Result, Socket};
+use std::time::Instant;
 
 pub struct Server {
-    socket: Socket,
-    clients: HashMap<SocketAddr, Client>,
-    pending: HashMap<SocketAddr, Client>,
+    peer: Peer,
 }
 
 impl Server {
     pub async fn new(addr: &str) -> Result<Self> {
-        let socket = Socket::bind(addr).await?;
-        println!("Listening on: {}", socket.local_addr()?);
+        let peer = Peer::bind(addr).await?;
+        println!("Listening on: {}", peer.local_addr()?);
 
-        Ok(Server {
-            socket,
-            clients: HashMap::new(),
-            pending: HashMap::new(),
-        })
+        Ok(Server { peer })
     }
 
-    pub fn process_packet(
-        addr: SocketAddr,
-        data: &[u8],
-        clients: &mut HashMap<SocketAddr, Client>,
-        pending: &mut HashMap<SocketAddr, Client>,
-    ) -> Result<()> {
-        let mut reader = PacketReader::new(data);
-        let header = reader.read_base_header()?;
-        if !header.is_current_protocol() {
-            debug!("protocol version does not match");
-            //    send error
-        }
-
-        match header.packet_type() {
-            PacketType::Connect => {
-                let session = reader.read_session_header()?;
-                match (clients.get(&addr), pending.get(&addr)) {
-                    (None, None) => {
-                        let server_id = random::<u64>();
-                        pending.insert(addr, Client::new(addr, session.session_id(), server_id));
-                        debug!(
-                            "connection request from: {} {} send server id:{}",
-                            addr,
-                            session.session_id(),
-                            server_id
-                        );
-                        // send server_id
-                    }
-                    (None, Some(c)) => {
-                        if c.challenge() == session.session_id() {
-                            clients.insert(addr, pending.remove(&addr).unwrap());
-                            debug!("connected from: {}", addr);
-                        //    send connected confirmation ? should be enough to start sending data packets
-                        } else if c.client_id != session.session_id() {
-                            debug!("challenge error from: {}", addr);
-                            //    send error
-                        }
-                        debug!("ignore con request from: {}", addr);
-                        // ignore connection request packets with client id
-                    }
-                    _ => debug!("ignore all from: {}", addr), // ignore the rest
-                }
-            }
-            PacketType::Data => {
-                let session = reader.read_session_header()?;
-                match clients.get(&addr) {
-                    Some(c) if c.challenge() == session.session_id() => {
-                        let payload = reader.read_payload();
-                        println!("{:?}: {:?}", c, from_utf8(&payload).unwrap())
-                    }
-                    _ => (),
-                }
-            }
-            _ => (),
-        }
-
+    pub async fn run(self) -> Result<()> {
+        let mut peer = self.peer;
+        peer.in_loop().await;
         Ok(())
-    }
-
-    pub async fn read_loop(self) -> Result<()> {
-        let Server {
-            mut socket,
-            mut clients,
-            mut pending,
-        } = self;
-        loop {
-            let (addr, data) = socket.recv().await?;
-            match Server::process_packet(addr, data, &mut clients, &mut pending) {
-                Err(e) => {
-                    error!("Encountered an error receiving data: {:}", e);
-                    continue;
-                }
-                _ => (),
-            }
-        }
     }
 }
 
-#[derive(Eq, PartialEq, Debug)]
 pub struct Client {
-    addr: SocketAddr,
-    client_id: u64,
-    server_id: u64,
+    peer: Peer,
+    remote: SocketAddr,
 }
 
 impl Client {
-    pub fn new(addr: SocketAddr, client_id: u64, server_id: u64) -> Self {
-        Client {
-            addr,
-            client_id,
-            server_id,
-        }
+    pub async fn new(addr: &str) -> Result<Self> {
+        let peer = Peer::bind_any().await?;
+        println!("Listening on: {}", peer.local_addr()?);
+
+        Ok(Client {
+            peer,
+            remote: addr.parse().unwrap(),
+        })
     }
 
-    pub fn challenge(&self) -> u64 {
-        self.client_id ^ self.server_id
+    pub async fn connect(&mut self) {
+        self.peer.connect(self.remote).await.unwrap();
+    }
+
+    pub async fn poll(&mut self) {
+        self.peer.manual_poll(Instant::now()).await.unwrap();
+    }
+
+    pub async fn loop_send(&mut self) {
+        let p = Packet::new(self.remote, Box::from("hello".as_bytes()));
+        self.peer.loop_send(&p).await.unwrap();
     }
 }
 

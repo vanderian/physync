@@ -1,5 +1,5 @@
 [package]
-name = "physync_relay"
+name = "physync"
 version = "0.1.0"
 authors = ["Marian Vanderka <vanderka.marian@gmail.com>"]
 edition = "2018"

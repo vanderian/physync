@@ -1,17 +1,51 @@
 use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
+use std::thread::yield_now;
+use std::time::Instant;
 
+use log::error;
 use tokio::net::{ToSocketAddrs, UdpSocket};
+use tokio::time::timeout;
 
 use crate::errors::Result;
-use crate::net::constants::DEFAULT_MTU;
+use crate::net::connection_manager::ConnectionManager;
+use crate::net::constants::DEFAULT_IDLE_TIMEOUT;
+use crate::Packet;
 
 #[derive(Debug)]
 pub struct Socket {
-    receive_buffer: Vec<u8>,
-    socket: UdpSocket,
+    pub socket: UdpSocket,
 }
 
 impl Socket {
+    pub fn new(socket: UdpSocket) -> Self {
+        Socket { socket }
+    }
+
+    pub async fn send_packet(&mut self, addr: &SocketAddr, payload: &[u8]) -> Result<usize> {
+        Ok(self.socket.send_to(payload, addr).await?)
+    }
+
+    pub async fn receive_packet<'a>(
+        &mut self,
+        buffer: &'a mut [u8],
+    ) -> Result<(&'a [u8], SocketAddr)> {
+        let rx = timeout(DEFAULT_IDLE_TIMEOUT, self.socket.recv_from(buffer));
+        Ok(rx
+            .await?
+            .map(move |(recv_len, address)| (&buffer[..recv_len], address))?)
+    }
+
+    pub fn local_addr(&self) -> Result<SocketAddr> {
+        Ok(self.socket.local_addr()?)
+    }
+}
+
+#[derive(Debug)]
+pub struct Peer {
+    handler: ConnectionManager,
+}
+
+impl Peer {
     pub async fn bind<A: ToSocketAddrs>(addresses: A) -> Result<Self> {
         let socket = UdpSocket::bind(addresses).await?;
         Self::bind_internal(socket)
@@ -26,31 +60,33 @@ impl Socket {
 
     fn bind_internal(socket: UdpSocket) -> Result<Self> {
         Ok(Self {
-            receive_buffer: vec![0; DEFAULT_MTU as usize],
-            socket,
+            handler: ConnectionManager::new(Socket::new(socket)),
         })
     }
 
-    /// Returns the local socket address
+    pub async fn in_loop(&mut self) {
+        loop {
+            match self.manual_poll(Instant::now()).await {
+                Ok(()) => (),
+                Err(e) => error!("encountered error: {}", e),
+            };
+            yield_now();
+        }
+    }
+
+    pub async fn manual_poll(&mut self, time: Instant) -> Result<()> {
+        self.handler.manual_poll(time).await
+    }
+
     pub fn local_addr(&self) -> Result<SocketAddr> {
-        Ok(self.socket.local_addr()?)
+        self.handler.socket().local_addr()
     }
 
-    pub fn socket(self) -> UdpSocket {
-        self.socket
+    pub async fn connect(&mut self, addr: SocketAddr) -> Result<()> {
+        self.handler.connect(addr, Instant::now()).await
     }
 
-    /*
-    /// Sends a single packet
-    pub async fn send(&mut self, packet: Packet) -> Result<usize> {
-        // let mut sock = &self.socket;
-        Ok(self.socket.send_to(packet.payload(), packet.addr()).await?)
-    }
-
-    */
-    /// Receives a single packet
-    pub async fn recv(&mut self) -> Result<(SocketAddr, &[u8])> {
-        let (size, addr) = self.socket.recv_from(&mut self.receive_buffer).await?;
-        Ok((addr, &self.receive_buffer[..size]))
+    pub async fn loop_send(&mut self, packet: &Packet) -> Result<()> {
+        self.handler.sending(packet).await
     }
 }

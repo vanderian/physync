@@ -36,17 +36,29 @@ impl<'s> PacketReader<'s> {
         }
     }
 
-    /// Reads the `SessionHeader` from the underlying buffer.
+    /// Reads the `SessionHeader` for session id from the underlying buffer.
     ///
     /// # Remark
     /// - Will change the position to the location of `SessionHeader`
     pub fn read_session_header(&mut self) -> Result<SessionHeader> {
-        self.cursor.set_position(u64::from(BaseHeader::size()));
+        self.session_header(u64::from(BaseHeader::size()), "session id")
+    }
+
+    /// Reads the `SessionHeader` for peer id from the underlying buffer.
+    ///
+    /// # Remark
+    /// - Will change the position to the location of `SessionHeader`
+    pub fn read_id_header(&mut self) -> Result<SessionHeader> {
+        self.session_header(u64::from(BaseHeader::size() + SessionHeader::size()), "peer id")
+    }
+
+    fn session_header(&mut self, pos: u64, msg: &str) -> Result<SessionHeader> {
+        self.cursor.set_position(pos);
 
         if self.can_read(SessionHeader::size()) {
             SessionHeader::read(&mut self.cursor)
         } else {
-            Err(ErrorKind::CouldNotReadHeader(String::from("session")))
+            Err(ErrorKind::CouldNotReadHeader(String::from(msg)))
         }
     }
 
@@ -105,6 +117,19 @@ mod tests {
         let header = reader.read_session_header().unwrap();
 
         assert_eq!(header.session_id(), 3);
+    }
+
+    #[test]
+    fn assure_read_id_header() {
+        // base header, session header, id header
+        let payload: Vec<u8> =
+            vec![vec![0, 1, 0], vec![0, 0, 0, 0, 0, 0, 0, 3], vec![0, 0, 0, 0, 0, 0, 0, 5]].concat();
+
+        let mut reader = PacketReader::new(payload.as_slice());
+
+        let header = reader.read_id_header().unwrap();
+
+        assert_eq!(header.session_id(), 5);
     }
 
     #[test]
