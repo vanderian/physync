@@ -4,6 +4,8 @@ use tokio::time::Duration;
 pub const BASE_HEADER_SIZE: u8 = 3;
 /// The size of the client header.
 pub const SESSION_HEADER_SIZE: u8 = 8;
+/// Size of random data appended to connect request to discourage ddos amplification
+pub const CONNECT_PAYLOAD_SIZE: usize = 1024;
 /// Maximum transmission unit of the payload.
 ///
 /// Derived from ethernet_mtu - ipv6_header_size - udp_header_size - packet header size

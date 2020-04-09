@@ -1,13 +1,15 @@
 use std::net::SocketAddr;
 
-use rand::random;
 use log::debug;
 
-use crate::errors::Result;
-use crate::features::connectivity::ConnectivityState::{Connected, Disconnected, Pending};
-use crate::packet::header::{BaseHeader, SessionHeader};
-use crate::packet::PacketType;
 use crate::{ErrorKind, OutgoingPacketBuilder, Packet};
+use crate::errors::{DecodingErrorKind, Result};
+use crate::errors::ErrorKind::DecodingError;
+use crate::features::connectivity::ConnectivityState::{Connected, Disconnected, Pending};
+use crate::net::constants::CONNECT_PAYLOAD_SIZE;
+use crate::packet::{PacketReader, PacketType};
+use crate::packet::header::{BaseHeader, SessionHeader};
+use rand::random;
 
 #[derive(PartialEq)]
 enum ConnectivityState {
@@ -34,24 +36,25 @@ impl ConnectivityHandler {
     pub fn process_in(
         &mut self,
         header: &BaseHeader,
-        session: SessionHeader,
-        peer_id: Option<SessionHeader>,
+        reader: &mut PacketReader,
     ) -> Result<()> {
-        // initial request, save peer id, `update` dispatches challenge response
-        if self.peer_id.is_none() && peer_id.is_some() {
-            self.peer_id = Some(peer_id.unwrap().session_id());
-            return Ok(());
+        let session = reader.read_session_header()?;
+
+        if header.packet_type() == PacketType::Connect {
+            let peer_id = reader.read_id_header()?;
+            if !reader.can_read(CONNECT_PAYLOAD_SIZE) {
+                return Err(DecodingError(DecodingErrorKind::Payload));
+            }
+
+            if self.peer_id.is_none() {
+                self.peer_id = Some(peer_id.session_id());
+                return Ok(());
+            }
         }
-        // peer should have a valid session by now
         self.check_session(&session)?;
-        // challenge response request
-        if self.state == Pending {
-            debug!("connected!");
-            self.state = Connected;
-        }
+
         if header.packet_type() == PacketType::Disconnect {
-            debug!("disconnected!");
-            self.state = Disconnected;
+            self.disconnect();
         }
 
         Ok(())
@@ -62,9 +65,10 @@ impl ConnectivityHandler {
     }
 
     pub fn create_connection_packet(&self, addr: SocketAddr) -> Option<Packet> {
-        // connection request, connection request response
+        // challenge request to client
         if self.state == Pending {
             let out = OutgoingPacketBuilder::new(&[])
+                .with_session_header(self.session_id())
                 .with_session_header(self.id)
                 .build();
             return Some(Packet::new(addr, out.contents()));
@@ -81,9 +85,20 @@ impl ConnectivityHandler {
         self.state == Connected
     }
 
-    fn check_session(&self, session: &SessionHeader) -> Result<()> {
+    fn disconnect(&mut self) {
+        debug!("disconnected!");
+        self.state = Disconnected;
+    }
+
+    fn check_session(&mut self, session: &SessionHeader) -> Result<()> {
         if session.session_id() != self.session_id() {
+            self.disconnect();
             return Err(ErrorKind::SessionMismatch);
+        }
+        // if we have a session set to connected
+        if self.state == Pending {
+            debug!("connected!");
+            self.state = Connected;
         }
         Ok(())
     }

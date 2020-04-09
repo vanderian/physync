@@ -29,7 +29,7 @@ impl<'s> PacketReader<'s> {
     pub fn read_base_header(&mut self) -> Result<BaseHeader> {
         self.cursor.set_position(0);
 
-        if self.can_read(BaseHeader::size()) {
+        if self.can_read(BaseHeader::size() as usize) {
             BaseHeader::read(&mut self.cursor)
         } else {
             Err(ErrorKind::CouldNotReadHeader(String::from("base")))
@@ -55,7 +55,7 @@ impl<'s> PacketReader<'s> {
     fn session_header(&mut self, pos: u64, msg: &str) -> Result<SessionHeader> {
         self.cursor.set_position(pos);
 
-        if self.can_read(SessionHeader::size()) {
+        if self.can_read(SessionHeader::size() as usize) {
             SessionHeader::read(&mut self.cursor)
         } else {
             Err(ErrorKind::CouldNotReadHeader(String::from(msg)))
@@ -75,8 +75,8 @@ impl<'s> PacketReader<'s> {
     }
 
     // Checks if a given length of bytes could be read with the buffer.
-    fn can_read(&self, length: u8) -> bool {
-        (self.buffer.len() - self.cursor.position() as usize) >= length as usize
+    pub fn can_read(&self, length: usize) -> bool {
+        (self.buffer.len() - self.cursor.position() as usize) >= length
     }
 }
 
@@ -89,8 +89,8 @@ mod tests {
         let buffer = vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
 
         let reader = PacketReader::new(buffer.as_slice());
-        assert_eq!(reader.can_read(buffer.len() as u8), true);
-        assert_eq!(reader.can_read((buffer.len() + 1) as u8), false);
+        assert_eq!(reader.can_read(buffer.len() as usize), true);
+        assert_eq!(reader.can_read((buffer.len() + 1) as usize), false);
     }
 
     #[test]

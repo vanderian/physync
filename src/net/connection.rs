@@ -55,14 +55,7 @@ impl Connection {
             self.peer_address
         );
 
-        // check connect, disconnect and session
-        let session = reader.read_session_header()?;
-        let peer_id = if header.packet_type() == PacketType::Connect {
-            reader.read_id_header().ok()
-        } else {
-            None
-        };
-        self.connectivity.process_in(&header, session, peer_id)?;
+        self.connectivity.process_in(&header, &mut reader)?;
 
         if header.packet_type() == PacketType::Data {
             let payload = reader.read_payload();
@@ -112,7 +105,6 @@ impl Connection {
         drop
     }
 
-    // temp for server
     pub fn is_ready(&self, sender: &SocketAddr) -> bool {
         self.connectivity.is_connected() && *sender != self.peer_address
     }

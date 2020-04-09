@@ -1,10 +1,13 @@
-use clap::{load_yaml, App, AppSettings, ArgMatches};
-use env_logger::Builder;
-use log::LevelFilter;
-use physync::{Client, Server};
 use std::error::Error;
 use std::result;
+
+use clap::{App, AppSettings, ArgMatches, load_yaml};
+use env_logger::Builder;
 use futures::TryFutureExt;
+use log::LevelFilter;
+
+use physync::client::Client;
+use physync::server::Server;
 
 #[tokio::main]
 async fn main() -> result::Result<(), Box<dyn Error>> {
@@ -34,12 +37,7 @@ async fn run_server(m: ArgMatches<'_>) -> result::Result<(), Box<dyn Error>> {
 
 async fn run_client(m: ArgMatches<'_>) -> result::Result<(), Box<dyn Error>> {
     let host = m.value_of("CONNECT_ADDR").unwrap();
-    let mut client = Client::new(host).await?;
-    client.connect().await;
-    client.poll().await;
-    client.poll().await;
-
-    client.loop_send().await;
+    Client::new(host).and_then(Client::run).await?;
 
     Ok(())
 }

@@ -1,16 +1,15 @@
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::net::SocketAddr;
-use std::time::{Duration, Instant};
 
 use log::{debug, error};
-use tokio::time::interval_at;
 
 use crate::errors::Result;
 use crate::net::constants::DEFAULT_MTU;
 use crate::net::{Connection, Socket};
 use crate::packet::PacketType;
 use crate::Packet;
+use std::time::Instant;
 
 // would be nicer to have a trait dependency on socket impl, but traits does not support async
 #[derive(Debug)]
@@ -29,6 +28,7 @@ impl ConnectionManager {
         }
     }
 
+    /// Poll one read/write cycle
     pub async fn manual_poll(&mut self, time: Instant) -> Result<()> {
         match self.socket.receive_packet(self.buffer.as_mut()).await {
             Ok((payload, peer)) => {
@@ -64,7 +64,7 @@ impl ConnectionManager {
         Ok(())
     }
 
-    // temporary for server
+    /// Relay incoming data all other peers
     async fn push_to_all(&mut self, packet: Packet, time: Instant) -> Result<()> {
         let outgoing = self
             .connections
@@ -82,31 +82,7 @@ impl ConnectionManager {
         Ok(())
     }
 
-    // temporary for client
-    pub async fn connect(&mut self, addr: SocketAddr, time: Instant) -> Result<()> {
-        let mut con = Connection::new(addr, time);
-        let packet = con.update(time).unwrap();
-        debug!("send client connect: {:?}", packet);
-        self.socket.send_packet(&addr, packet.payload()).await?;
-        self.connections.insert(addr, con);
-        Ok(())
-    }
-
-    pub fn socket(&self) -> &Socket {
-        &self.socket
-    }
-
-    pub async fn sending(&mut self, packet: &Packet) -> Result<()> {
-        let mut i = interval_at(
-            tokio::time::Instant::now() + Duration::from_secs(5),
-            Duration::from_secs(2),
-        );
-        let con = self.connections.values_mut().last().unwrap();
-        loop {
-            i.tick().await;
-            let p = con.process_out(packet, PacketType::Data, Instant::now());
-            debug!("send client: {:?}", p);
-            self.socket.send_packet(&p.addr(), p.payload()).await?;
-        }
+    pub fn local_addr(&self) -> Result<SocketAddr> {
+        self.socket.local_addr()
     }
 }

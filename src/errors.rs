@@ -31,7 +31,7 @@ impl Display for ErrorKind {
             ErrorKind::IOError(e) => write!(f, "An IO Error occurred. Reason: {:?}.", e),
             ErrorKind::DecodingError(e) => write!(
                 f,
-                "Something went wrong with parsing the header. Reason: {:}.",
+                "Something went wrong with parsing the packet. Reason: {:}.",
                 e
             ),
             ErrorKind::CouldNotReadHeader(header) => write!(
@@ -53,12 +53,15 @@ impl Display for ErrorKind {
 pub enum DecodingErrorKind {
     /// The [PacketType] could not be read
     PacketType,
+    /// The payload could not be read
+    Payload,
 }
 
 impl Display for DecodingErrorKind {
     fn fmt(&self, fmt: &mut Formatter<'_>) -> fmt::Result {
         match *self {
             DecodingErrorKind::PacketType => write!(fmt, "The packet type could not be read."),
+            DecodingErrorKind::Payload => write!(fmt, "The expected payload could not be read."),
         }
     }
 }
