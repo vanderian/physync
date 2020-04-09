@@ -67,6 +67,7 @@ impl Connection {
 
     pub fn process_out(&mut self, packet: &Packet, ptype: PacketType, time: Instant) -> Packet {
         self.last_sent = time;
+
         let out = OutgoingPacketBuilder::new(packet.payload())
             .with_default_header(ptype)
             .with_session_header(self.connectivity.session_id())
@@ -100,7 +101,11 @@ impl Connection {
     pub fn should_drop(&self, time: Instant) -> bool {
         let drop = self.last_seen(time) >= DEFAULT_IDLE_TIMEOUT || self.connectivity.should_drop();
         if drop {
-            debug!("should drop {:?} last seen: {:?}", self, self.last_seen(time));
+            debug!(
+                "should drop {:?} last seen: {:?}",
+                self,
+                self.last_seen(time)
+            );
         }
         drop
     }

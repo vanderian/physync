@@ -11,7 +11,7 @@ use physync::server::Server;
 
 #[tokio::main]
 async fn main() -> result::Result<(), Box<dyn Error>> {
-    Builder::default().filter_level(LevelFilter::Trace).init();
+    env_logger::init();
 
     let yaml = load_yaml!("cli/cli.yml");
     let matches = App::from_yaml(yaml)

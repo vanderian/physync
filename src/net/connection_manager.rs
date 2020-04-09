@@ -1,15 +1,16 @@
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::net::SocketAddr;
+use std::time::Instant;
 
-use log::{debug, error};
+use log::{debug, error, info};
 
 use crate::errors::Result;
-use crate::net::constants::DEFAULT_MTU;
+use crate::features::ThroughputMonitoring;
 use crate::net::{Connection, Socket};
-use crate::packet::PacketType;
+use crate::net::constants::DEFAULT_MTU;
 use crate::Packet;
-use std::time::Instant;
+use crate::packet::PacketType;
 
 // would be nicer to have a trait dependency on socket impl, but traits does not support async
 #[derive(Debug)]
@@ -17,6 +18,8 @@ pub struct ConnectionManager {
     connections: HashMap<SocketAddr, Connection>,
     buffer: Vec<u8>,
     socket: Socket,
+    monitor_in: ThroughputMonitoring,
+    monitor_out: ThroughputMonitoring,
 }
 
 impl ConnectionManager {
@@ -25,6 +28,8 @@ impl ConnectionManager {
             connections: HashMap::new(),
             buffer: vec![0; DEFAULT_MTU as usize],
             socket,
+            monitor_in: Default::default(),
+            monitor_out: Default::default(),
         }
     }
 
@@ -47,11 +52,13 @@ impl ConnectionManager {
             }
             Err(e) => error!("encountered read socket error: {}", e),
         }
+        self.monitor_in.tick();
 
         // update all connections
         for con in self.connections.values_mut() {
             if let Some(packet) = con.update(time) {
                 debug!("send on update: {:?}", packet);
+                self.monitor_out.tick();
                 self.socket
                     .send_packet(&packet.addr(), packet.payload())
                     .await?;
@@ -60,6 +67,9 @@ impl ConnectionManager {
 
         // iterate through all connections and remove those that should be dropped
         self.connections.retain(|_, con| !con.should_drop(time));
+
+        self.monitor_out.report(|m| info!("out: {:?}", m));
+        self.monitor_in.report(|m| info!("in: {:?}", m));
 
         Ok(())
     }
@@ -76,6 +86,7 @@ impl ConnectionManager {
 
         for p in outgoing {
             debug!("send relay: {:?}", packet);
+            self.monitor_out.tick();
             self.socket.send_packet(&p.addr(), p.payload()).await?;
         }
 

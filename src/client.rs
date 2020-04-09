@@ -91,7 +91,7 @@ impl Client {
     pub async fn sending(mut tx: SendHalf, session: u64, remote: SocketAddr) -> Result<()> {
         let mut i = interval_at(
             tokio::time::Instant::now() + Duration::from_secs(3),
-            Duration::from_millis(3000),
+            Duration::from_millis(10),
         );
         let mut payload = [0_u8; 128];
         thread_rng().fill(&mut payload);
